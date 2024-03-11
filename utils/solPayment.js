@@ -155,7 +155,7 @@ class SolPayment {
         //       "F1p5ct9NqBP63Zrf2QBFn1MAGTNNiRG6BRkmm4g5vCUS"
         //     );
         const toKey = new PublicKey(
-                "5V8M3JYmJqPaXWYjFpkQ2QeacwKQ4SFiNN8WCykjAa55"
+                process.env.TEAM_WALLET
             );
         
         const { blockhash } = await connection.getLatestBlockhash('finalized');
