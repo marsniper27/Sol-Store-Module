@@ -29,14 +29,19 @@ module.exports = {
             await interaction.reply({ content: `Creating Wallet`, ephemeral: true });
             const keys = await generateWallet();
             const encryptKey = generateKey();
-            const user = {id:target.id,key:encryptKey.toString('hex')}
+            // const user = {id:target.id,key:encryptKey.toString('hex')}
             try {
                 // reading a JSON file synchronously
-                const jsonData  = fs.readFileSync("user.json");
-                const users = JSON.parse(jsonData);
-                users[target.id] = [user]
-                const data = JSON.stringify(users);
-                fs.writeFileSync("user.json", data);
+                // const jsonData  = fs.readFileSync("user.json");
+                // const users = JSON.parse(jsonData);
+                // users[target.id] = [user]
+                // const data = JSON.stringify(users);
+                // fs.writeFileSync("user.json", data);
+                await saveKey(client,
+                    {
+                        _id:target.id,
+                        key:encryptKey.toString('hex')
+                    });
 
             } catch (error) {
                 // logging the error
@@ -86,4 +91,8 @@ async function generateWallet(){
 async function saveWallet(client, entry){
     const result = await client.db(process.env.MONGO_DB_NAME).collection(process.env.MONGO_DB_COLLECTION).insertOne(entry);
     console.log(`New Wallet created for ${entry.user} with public key ${entry.publicKey}`);
+}
+async function saveKey(client, entry){
+    const result = await client.db(process.env.MONGO_DB_NAME).collection('keys').insertOne(entry);
+    console.log(`key saved`);
 }

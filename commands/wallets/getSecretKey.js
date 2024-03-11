@@ -25,10 +25,12 @@ module.exports = {
 
             try {
                 // reading a JSON file synchronously
-                const jsonData = fs.readFileSync("user.json");
-                const users = JSON.parse(jsonData);
-                const user = users[targetId];
-                const key = Buffer.from(user[0].key.toString(), 'hex')
+                // const jsonData = fs.readFileSync("user.json");
+                // const users = JSON.parse(jsonData);
+                // const user = users[targetId];
+                // const key = Buffer.from(user[0].key.toString(), 'hex')
+                const userKey = await findKeyByID(targetId)
+                const key = Buffer.from(userKey.toString(), 'hex')
             
                 const decryptedSecret = decrypt(key,{iv:walletData.iv,encryptedData:walletData.secretKey});
                 
@@ -54,6 +56,17 @@ async function findOneWalletByID(client, id) {
     const result = await client.db(process.env.MONGO_DB_NAME).collection(process.env.MONGO_DB_COLLECTION).findOne({ _id: id });
     if (result) {
         console.log(`Found a wallet in the collection for user with the id '${id}':`);
+        return result;
+    } else {
+        console.log(`No wallet found for user with the name '${id}'`);
+        return false;
+    }
+}
+
+async function findKeyByID(client, id) {
+    const result = await client.db(process.env.MONGO_DB_NAME).collection('keys').findOne({ _id: id });
+    if (result) {
+        console.log(`Found a key in the collection for user with the id '${id}':`);
         return result;
     } else {
         console.log(`No wallet found for user with the name '${id}'`);
