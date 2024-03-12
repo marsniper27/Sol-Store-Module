@@ -1,9 +1,9 @@
-//PurchaseItems.js
+//solPayments.js
 require('dotenv').config();
 const { SlashCommandBuilder, ButtonBuilder, ButtonStyle,ActionRowBuilder } = require('discord.js');
 const fs = require("fs");
-const { client } = require("../../db.js");
-const { decrypt} = require ("../../encryption.js")
+const { decrypt} = require ("../encryption.js")
+const { findOneWalletByID, findKeyByID } = require('../db');
 const bs58 = require('bs58');
 const {
     Keypair,
@@ -20,82 +20,18 @@ const {
 let connection = new Connection(clusterApiUrl("testnet"));
 
 class SolPayment {
-    constructor(dbClient) {
-        this.client = dbClient;
+    constructor() {
         this.connection = new Connection(clusterApiUrl(process.env.SOLANA_NETWORK));
     }
-
-    async performSale(interaction,lamportAmount){
-        const target = interaction.options.getUser('user') ?? interaction.user;
-        const targetId = target.id;
+    async saleNoConfirmation(interaction,lamportAmount){
         try {
-            // Connect to the MongoDB cluster
-            await client.connect();
-            // await interaction.reply({ content: `Fetching Wallet`, ephemeral: true });
-            const walletData = await findOneWalletByID(client,target.id)
-            if(!walletData) {
-                interaction.reply({ content: `You do not have a wallet`, ephemeral: true });
-                return;
-            }
-
+            const userKeypair = await this.initUserKeypair(interaction.user.id)
             try {
-                // reading a JSON file synchronously
-                // const jsonData = fs.readFileSync("user.json");
-                // const users = JSON.parse(jsonData);
-                // const user = users[targetId];
-                // const key = Buffer.from(user[0].key.toString(), 'hex')
-                const userKey = await findKeyByID(targetId)
-                const key = Buffer.from(userKey.toString(), 'hex')
-            
-                const decryptedSecret = decrypt(key,{iv:walletData.iv,encryptedData:walletData.secretKey});
-                const userKeypair = await getKeypair(decryptedSecret);
-                const balance = await getBalance(userKeypair);
-                    if(balance <= lamportAmount+10000){
-                    interaction.reply({ content: `You do not have enough SOL for thsi purchase. Balance: ${balance / LAMPORTS_PER_SOL}SOL`, ephemeral: true });
-                    return;
-                }
-                const transaction = await createTransaction(userKeypair,lamportAmount);
-                const fees = await estimateFees(transaction);
-                
-                const confirm = new ButtonBuilder()
-                    .setCustomId('confirm')
-                    .setLabel('Confirm Purchase')
-                    .setStyle(ButtonStyle.Danger);
+                const toKey = new PublicKey(process.env.TEAM_WALLET);
+                const transaction = await this.createTransaction(userKeypair,lamportAmount,toKey);
 
-                const cancel = new ButtonBuilder()
-                    .setCustomId('cancel')
-                    .setLabel('Cancel')
-                    .setStyle(ButtonStyle.Secondary);
-
-                
-                const row = new ActionRowBuilder()
-                .addComponents(cancel, confirm);
-
-                const response = await interaction.reply({ content: `Please confrim transaction. Cost : ${lamportAmount/LAMPORTS_PER_SOL} SOL, Fees: ${fees/LAMPORTS_PER_SOL} SOL, Total : ${(lamportAmount+fees)/LAMPORTS_PER_SOL} SOL`,
-                components: [row], ephemeral: true });
-
-                const collectorFilter = i => i.user.id === interaction.user.id;
-
-                try {
-                    const confirmation = await response.awaitMessageComponent({ filter: collectorFilter, time: 120_000 });
-                    if (confirmation.customId === 'confirm') {
-                        try{
-                            await confirmation.update({content: `Creating and sending transaction`, components:[]})
-                            const signature = await signAndSendTransaction(transaction,userKeypair);
-                            // await confirmation.update({ content: `100 Sol has been sent, trasnaction signature: ${signature}`, components: [] });
-                        
-                            await interaction.editReply({ content: `${lamportAmount/LAMPORTS_PER_SOL} Sol has been sent, trasnaction signature: ${signature}`, components: [] });
-                        }catch(error){
-                            console.error(error)
-                            await interaction.editReply({ content: 'Transaction Failed', components: [] });
-                        }
-                    } else if (confirmation.customId === 'cancel') {
-                        // await confirmation.update({ content: 'Action cancelled', components: [] });
-                        await interaction.editReply({ content: 'Action cancelled', components: [] });
-                    }
-                } catch (e) {
-                    await interaction.editReply({ content: 'Confirmation not received within 1 minute, cancelling', components: [] });
-                }
+                const result = await this.executeTransaction(interaction, transaction, userKeypair, lamportAmount);
+                return result;
 
             } catch (error) {
                 // logging the error
@@ -106,32 +42,89 @@ class SolPayment {
 
         } catch (e) {
             console.error(e);
-        } finally {
-            await client.close();
-        }
-    };
-
-    async findOneWalletByID(client, id) {
-        const result = await client.db("wallets").collection("user_wallets").findOne({ _id: id });
-        if (result) {
-            console.log(`Found a wallet in the collection for user with the id '${id}':`);
-            return result;
-        } else {
-            console.log(`No wallet found for user with the name '${id}'`);
             return false;
         }
     };
 
-    
-    async findKeyByID(client, id) {
-        const result = await client.db(process.env.MONGO_DB_NAME).collection('keys').findOne({ _id: id });
-        if (result) {
-            console.log(`Found a key in the collection for user with the id '${id}':`);
-            return result;
-        } else {
-            console.log(`No wallet found for user with the name '${id}'`);
+    async performSale(interaction,lamportAmount){
+        try {
+            const userKeypair = await this.initUserKeypair(interaction.user.id)
+            try {
+                const toKey = new PublicKey(process.env.TEAM_WALLET);
+                const transaction = await this.createTransaction(userKeypair,lamportAmount,toKey);
+                const result = await this.confirmAndExecuteTransaction(interaction, transaction, userKeypair, lamportAmount);
+                return result;
+
+            } catch (error) {
+                // logging the error
+                console.error(error);
+            
+                throw error;
+            }
+
+        } catch (e) {
+            console.error(e);
             return false;
         }
+    };
+
+    async performTransfer(interaction,lamportAmount,targetUser){
+        try {
+            const userKeypair = await this.initUserKeypair(interaction.user.id)
+            const targetWalletData = await findOneWalletByID(targetUser.id)
+            if(!targetWalletData) {
+                interaction.reply({ content: `${targetUser.username} does not have a wallet`, ephemeral: true });
+                return false;
+            }
+
+            try {
+                const toKey = new PublicKey(targetWalletData.publicKey);
+                const transaction = await this.createTransaction(userKeypair,lamportAmount,toKey);
+                const result = await this.confirmAndExecuteTransaction(interaction, transaction, userKeypair, lamportAmount);
+                return result;
+            } catch (error) {
+                // logging the error
+                console.error(error);
+            
+                throw error;
+            }
+
+        } catch (e) {
+            console.error(e);
+            return false;
+        }
+    };
+
+    async performWithdraw(interaction,lamportAmount,targetWallet){
+        try {
+            const userKeypair = await this.initUserKeypair(interaction.user.id)
+            try {
+                const toKey = new PublicKey(targetWallet);
+                const transaction = await this.createTransaction(userKeypair,lamportAmount,toKey);
+                const result = await this.confirmAndExecuteTransaction(interaction, transaction, userKeypair, lamportAmount);
+                return result;
+            } catch (error) {
+                // logging the error
+                console.error(error);
+            
+                throw error;
+            }
+
+        } catch (e) {
+            console.error(e);
+            return false;
+        }
+    };
+
+    async initUserKeypair(targetId) {
+        const walletData = await findOneWalletByID(targetId);
+        const userKeyData = await findKeyByID(targetId);
+        if (!walletData || !userKeyData) {
+            throw new Error("Wallet or key not found");
+        }
+        const key = Buffer.from(userKeyData.key, 'hex');
+        const decryptedSecret = decrypt(key, { iv: walletData.iv, encryptedData: walletData.secretKey });
+        return Keypair.fromSecretKey(decryptedSecret);
     }
 
     async getKeypair(secret){
@@ -145,18 +138,7 @@ class SolPayment {
         return balance;
     };
 
-    async createTransaction(fromKeypair, lamportAmount){
-        const toKeypair = Keypair.fromSecretKey(
-            bs58.decode(
-            "5QDamE6PZQKcFXyvTmKfCqMzdpa97TH5pq4GoYe4zjUXmChXRz3QbpvgVNPph2hyocQkjNMhgYb4WQoXngnowiRM"
-            )
-        );
-        // const toKey = new PublicKey(
-        //       "F1p5ct9NqBP63Zrf2QBFn1MAGTNNiRG6BRkmm4g5vCUS"
-        //     );
-        const toKey = new PublicKey(
-                process.env.TEAM_WALLET
-            );
+    async createTransaction(fromKeypair, lamportAmount, toKey){
         
         const { blockhash } = await connection.getLatestBlockhash('finalized');
         let transaction = new Transaction();
@@ -176,12 +158,7 @@ class SolPayment {
     };
 
     async estimateFees(transaction){
-        // const message = await transaction.compileMessage();
         const fees = await transaction.getEstimatedFee(connection);
-        // const fees = await connection.getFeeForMessage(
-        //     transaction.compileMessage(),
-        //     'confirmed'
-        //   );
         return fees;
     };
 
@@ -191,8 +168,91 @@ class SolPayment {
             return transactionSignature;
         }catch(e){
             console.error(e)
+            return e
         }
     };
+
+    async confirmAndExecuteTransaction(interaction, transaction, keypair, lamportAmount) {
+        const fees = await this.estimateFees(transaction);
+        const balance = await this.getBalance(keypair);
+        if(balance <= lamportAmount+fees){
+            interaction.reply({ content: `You do not have enough SOL for this purchase. Balance: ${balance / LAMPORTS_PER_SOL}SOL`, ephemeral: true });
+            return false ;
+        }
+
+        const confirmButton = new ButtonBuilder()
+            .setCustomId('confirm')
+            .setLabel('Confirm')
+            .setStyle(ButtonStyle.Success);
+
+        const cancelButton = new ButtonBuilder()
+            .setCustomId('cancel')
+            .setLabel('Cancel')
+            .setStyle(ButtonStyle.Danger);
+
+        const row = new ActionRowBuilder().addComponents(confirmButton, cancelButton);
+
+        const response = await interaction.reply({
+            content: `Transaction details:\nAmount: ${lamportAmount / LAMPORTS_PER_SOL} SOL\nFees: ${fees / LAMPORTS_PER_SOL} SOL\nTotal: ${(lamportAmount+fees)/LAMPORTS_PER_SOL}\nConfirm transaction?`,
+            components: [row],
+            ephemeral: true
+        });
+
+        const collectorFilter = i => i.user.id === interaction.user.id;
+
+        try {
+            const confirmation = await response.awaitMessageComponent({ filter: collectorFilter, time: 120_000 });
+            if (confirmation.customId === 'confirm') {
+                try{
+                    await confirmation.update({content: `Creating and sending transaction`, components:[]})
+                    const signature = await this.signAndSendTransaction(transaction,keypair);
+                    if(!signature){return false}
+                    if(signature instanceof Error){
+                        await interaction.editReply({ content: `An error occured: \n ${signature}`, components: [] });
+                        return false
+                    }
+                    await interaction.editReply({ content: `${lamportAmount/LAMPORTS_PER_SOL} Sol has been sent, trasnaction signature: ${signature}`, components: [] });
+                    return true;
+                }catch(error){
+                    console.error(error)
+                    await interaction.editReply({ content: 'Transaction Failed', components: [] });
+                    return false;
+                }
+            } else if (confirmation.customId === 'cancel') {
+                await interaction.editReply({ content: 'Action cancelled', components: [] });
+                return false;
+            }
+        } catch (e) {
+            await interaction.editReply({ content: 'Confirmation not received within 1 minute, cancelling', components: [] });
+            return false;
+        }
+
+    }
+
+    async executeTransaction(interaction, transaction, keypair, lamportAmount) {
+        const fees = await this.estimateFees(transaction);
+        const balance = await this.getBalance(keypair);
+        if(balance <= lamportAmount+fees){
+            interaction.reply({ content: `You do not have enough SOL for this purchase. Balance: ${balance / LAMPORTS_PER_SOL}SOL`, ephemeral: true });
+            return false ;
+        }
+
+        try {
+            await confirmation.update({content: `Creating and sending transaction`, components:[]})
+            const signature = await this.signAndSendTransaction(transaction,keypair);
+            if(!signature){return false}
+            if(signature instanceof Error){
+                await interaction.editReply({ content: `An error occured: \n ${signature}`, components: [] });
+                return false
+            }
+            await interaction.editReply({ content: `${lamportAmount/LAMPORTS_PER_SOL} Sol has been sent, trasnaction signature: ${signature}`, components: [] });
+            return true;
+        }catch(error){
+            console.error(error)
+            await interaction.editReply({ content: 'Transaction Failed', components: [] });
+            return false;
+        }
+    }
 }
 
 module.exports = SolPayment;
