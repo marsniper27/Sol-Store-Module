@@ -16,6 +16,7 @@ const {
     PublicKey
   } = require("@solana/web3.js");
 
+  const { TOKEN_PROGRAM_ID, getAssociatedTokenAddress, createTransferInstruction,createAssociatedTokenAccountInstruction,ASSOCIATED_TOKEN_PROGRAM_ID  } = require('@solana/spl-token');
 
 let connection = new Connection(clusterApiUrl("testnet"));
 
@@ -71,9 +72,9 @@ class SolPayment {
     async performTransfer(interaction,lamportAmount,targetUser){
         try {
             const userKeypair = await this.initUserKeypair(interaction.user.id)
-            const targetWalletData = await findOneWalletByID(targetUser.id)
+            const targetWalletData = await findOneWalletByID('wallet','user_wallets',targetUser.id)
             if(!targetWalletData) {
-                interaction.reply({ content: `${targetUser.username} does not have a wallet`, ephemeral: true });
+                await interaction.reply({ content: `${targetUser.username} does not have a wallet`, ephemeral: true });
                 return false;
             }
 
@@ -116,8 +117,42 @@ class SolPayment {
         }
     };
 
+    async transferSPL (interaction, mintAddress, targetUser, targetIsUser, amount) {
+        try {
+            // Initialize sender and receiver's public keys
+            const senderKeypair = await this.initUserKeypair(interaction.user.id);
+            let receiverPublicKey = null;
+            if(targetIsUser){
+                const targetWalletData = await findOneWalletByID('wallet','user_wallets',targetUser.id);
+                receiverPublicKey = new PublicKey(targetWalletData.publicKey);
+            }
+            else{
+                receiverPublicKey = new PublicKey(targetUser);
+            }
+            
+            // Mint address of the SPL Token
+            const mintPublicKey = new PublicKey(mintAddress);
+        
+            // Perform the SPL Token transfer
+            const result = await this.transferSPLToken(senderKeypair, receiverPublicKey, amount, mintPublicKey);
+            
+            if (result && !(result instanceof Error)) {
+                console.log('SPL Token transfer successful');
+                return result;
+                // Respond to the interaction accordingly
+            } else {
+                console.error('SPL Token transfer failed');
+                return result;
+                // Respond to the interaction accordingly
+            }
+            } catch (error) {
+                console.error('Transfer SPL Token failed:', error);
+                // Respond to the interaction with error information
+            }
+    }
+
     async initUserKeypair(targetId) {
-        const walletData = await findOneWalletByID(targetId);
+        const walletData = await findOneWalletByID('wallet','user_wallets',targetId);
         const userKeyData = await findKeyByID(targetId);
         if (!walletData || !userKeyData) {
             throw new Error("Wallet or key not found");
@@ -176,7 +211,7 @@ class SolPayment {
         const fees = await this.estimateFees(transaction);
         const balance = await this.getBalance(keypair);
         if(balance <= lamportAmount+fees){
-            interaction.reply({ content: `You do not have enough SOL for this purchase. Balance: ${balance / LAMPORTS_PER_SOL}SOL`, ephemeral: true });
+            await interaction.reply({ content: `You do not have enough SOL for this purchase. Balance: ${balance / LAMPORTS_PER_SOL}SOL`, ephemeral: true });
             return false ;
         }
 
@@ -233,7 +268,7 @@ class SolPayment {
         const fees = await this.estimateFees(transaction);
         const balance = await this.getBalance(keypair);
         if(balance <= lamportAmount+fees){
-            interaction.reply({ content: `You do not have enough SOL for this purchase. Balance: ${balance / LAMPORTS_PER_SOL}SOL`, ephemeral: true });
+            await interaction.reply({ content: `You do not have enough SOL for this purchase. Balance: ${balance / LAMPORTS_PER_SOL}SOL`, ephemeral: true });
             return false ;
         }
 
@@ -251,6 +286,89 @@ class SolPayment {
             console.error(error)
             await interaction.editReply({ content: 'Transaction Failed', components: [] });
             return false;
+        }
+    }
+
+    async transferSPLToken(senderKeypair, receiverPublicKey, amount, mintAddress) {
+        try {
+            // Get the sender's associated token account for the SPL token
+            const senderTokenAccountAddress = await getAssociatedTokenAddress(
+                mintAddress,
+                senderKeypair.publicKey,
+                false,
+                TOKEN_PROGRAM_ID // Ensure this is a PublicKey
+            );
+
+            const tokenAmount = await this.checkSPLTokenBalance(senderTokenAccountAddress,mintAddress)
+
+            if(tokenAmount < amount){
+                console.log("Insufficient token balance for transfer.");
+                return false;
+            }
+    
+            // Get or create the receiver's associated token account
+            const receiverTokenAccountAddress = await getAssociatedTokenAddress(
+                mintAddress,
+                receiverPublicKey,
+                true, // Create if it does not exist
+                TOKEN_PROGRAM_ID // Ensure this is a PublicKey
+            );
+
+            // Check if the receiver's associated token account needs to be created
+            const receiverAccountInfo = await this.connection.getAccountInfo(receiverTokenAccountAddress);
+
+            const transaction = new Transaction();
+            if (!receiverAccountInfo) {
+                // Add instruction to create the receiver's associated token account
+                const createAccountInstruction = createAssociatedTokenAccountInstruction(
+                    senderKeypair.publicKey, // payer
+                    receiverTokenAccountAddress, // associated token account address
+                    receiverPublicKey, // account owner
+                    mintAddress, // mint address
+                    TOKEN_PROGRAM_ID,
+                    ASSOCIATED_TOKEN_PROGRAM_ID
+                );
+                transaction.add(createAccountInstruction);
+                console.log('Created reciever Associated Token Account')
+            }
+
+            // Create the transfer instruction
+            const transferInstruction = createTransferInstruction(
+                senderTokenAccountAddress, // sender token account
+                receiverTokenAccountAddress, // receiver token account
+                senderKeypair.publicKey, // authority (owner of the sender account)
+                amount, // amount
+                [],
+                TOKEN_PROGRAM_ID
+            );
+    
+            transaction.add(transferInstruction);
+            console.log('transaction created');
+            // Create and sign a transaction
+            const signature = await sendAndConfirmTransaction(
+                this.connection,
+                transaction,
+                [senderKeypair] // signers
+            );
+    
+            console.log("Transfer successful! Signature:", signature);
+            return signature;
+        } catch (error) {
+            console.error("Transfer failed:", error);
+            return error;
+        }
+    }
+    async checkSPLTokenBalance(tokenAccountAddress) {
+        // Fetch parsed information of the token account
+        const accountInfo = await this.connection.getParsedAccountInfo(tokenAccountAddress);
+        if (accountInfo.value) {
+            // Extract the UI amount (the amount user sees) from the account info
+            const tokenAmount = accountInfo.value.data.parsed.info.tokenAmount.uiAmount;
+            console.log(`Token balance: ${tokenAmount}`);
+            return tokenAmount;
+        } else {
+            console.log("Token account not found or not initialized.");
+            return 0;
         }
     }
 }

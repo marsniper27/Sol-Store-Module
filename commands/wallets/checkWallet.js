@@ -11,7 +11,7 @@ module.exports = {
         await interaction.reply({ content: `Fetching Wallet`, ephemeral: true });
         
         try {
-            const walletData = await findOneWalletByID(target.id)
+            const walletData = await findOneWalletByID('wallet','user_wallets',target.id)
             if(!walletData) {
                 interaction.editReply({ content: `You do not have a wallet`, ephemeral: true });
                 return;

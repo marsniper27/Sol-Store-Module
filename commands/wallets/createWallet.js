@@ -17,7 +17,7 @@ module.exports = {
 	async execute(interaction) {
         const target = interaction.options.getUser('user') ?? interaction.user;
         try {
-            const hasWallet = await findOneWalletByID(target.id)
+            const hasWallet = await findOneWalletByID('wallet','user_wallets',target.id)
             if(hasWallet) {
                 interaction.reply({ content: `You already have a wallet`, ephemeral: true });
                 return;
@@ -41,7 +41,7 @@ module.exports = {
 
             const encryptSecret = encrypt(encryptKey,keys.secretKey)
         
-            await saveWallet(
+            await saveWallet('wallet','user_wallets',
                 {
                     _id:target.id,
                     publicKey: keys.publicKey.toBase58(),
