@@ -23,7 +23,7 @@ if (process.env.SKIP_DB_INIT !== 'true') {
 async function connectDB(dbType) {
     if (!dbInstances.has(dbType)) {
         await client.connect();
-        const dbInstance = client.db(dbType === 'wallet' ? process.env.MONGO_DB_NAME : dbType);
+        const dbInstance = client.db(dbType === 'wallets' ? process.env.MONGO_DB_NAME : dbType);
         dbInstances.set(dbType, dbInstance);
     }
     return dbInstances.get(dbType);
@@ -42,7 +42,7 @@ async function connectDB(dbType) {
 async function saveEntry(dbType, collection,entry) {
     const db = await connectDB(dbType);
     const result = await db.collection(collection).insertOne(entry);
-    if(dbType === 'wallet'){
+    if(dbType === 'wallets'){
         console.log(`New Wallet created for ${entry.user} with public key ${entry.publicKey}`);
     }
 }
@@ -53,12 +53,12 @@ async function findEntryByID(dbType, collection,id) {
     const result = await db.collection(collection).findOne({ _id: id });
 
     if (result) {
-        if(dbType === 'wallet'){
+        if(dbType === 'wallets'){
             console.log(`Found a wallet in the collection for user with the id '${id}':`);
         }
         return result;
     } else {
-        if(dbType === 'wallet'){
+        if(dbType === 'wallets'){
             console.log(`No wallet found for user with the id '${id}'`);
         }
         return false;
@@ -67,14 +67,14 @@ async function findEntryByID(dbType, collection,id) {
 
 // Save an encryption key entry in the database
 async function saveKey(entry) {
-    const db = await connectDB('wallet');
+    const db = await connectDB('wallets');
     const result = await db.collection('keys').insertOne(entry);
     console.log(`Key saved for user with ID: ${entry._id}`);
 }
 
 // Find an encryption key by ID
 async function findKeyByID(id) {
-    const db = await connectDB('wallet');
+    const db = await connectDB('wallets');
     const result = await db.collection('keys').findOne({ _id: id });
 
     if (result) {
@@ -90,7 +90,7 @@ async function removeEntry(dbType, collection, id) {
     const db = await connectDB(dbType);
     await db.collection(collection).deleteOne({ _id: id });
     // Optionally, log the removal for debugging or auditing purposes
-    if(dbType === 'wallet'){
+    if(dbType === 'wallets'){
         console.log(`Entry for ${id} removed from the ${collection} collection.`);
     }
 }
@@ -110,4 +110,4 @@ process.on('SIGINT', async () => {
 });
 
 // Export the functions for use in other files
-module.exports = { saveWallet: saveEntry, saveEntry, findOneWalletByID: findEntryByID, findEntryByID,saveKey, findKeyByID, removeEntry };
+module.exports = { saveWallet: saveEntry, saveEntry, findOneWalletByID: findEntryByID, findEntryByID,saveKey, findKeyByID, removeEntry,incrementFields };

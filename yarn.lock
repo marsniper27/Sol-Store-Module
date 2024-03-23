@@ -693,6 +693,14 @@ magic-bytes.js@^1.5.0:
   resolved "https://registry.yarnpkg.com/magic-bytes.js/-/magic-bytes.js-1.10.0.tgz#c41cf4bc2f802992b05e64962411c9dd44fdef92"
   integrity sha512-/k20Lg2q8LE5xiaaSkMXk4sfvI+9EGEykFS4b0CHHGWqDYU0bGUFSwchNOMA56D7TCs9GwVTkqe9als1/ns8UQ==
 
+mars-simple-mongodb@^0.1.0:
+  version "0.1.1"
+  resolved "https://registry.yarnpkg.com/mars-simple-mongodb/-/mars-simple-mongodb-0.1.1.tgz#f9c2a63a043d12c331617bedbd59c1646a05c971"
+  integrity sha512-VAi6uyg8d/uzipMyuiEI/D1LoZ+LOFfY+pjWfkmn6V1HDARo4eM7FckEDYsSpot33DWC69VbS9y6uLeDFOqQYg==
+  dependencies:
+    dotenv "^16.4.5"
+    mongodb "^6.5.0"
+
 memory-pager@^1.0.2:
   version "1.5.0"
   resolved "https://registry.yarnpkg.com/memory-pager/-/memory-pager-1.5.0.tgz#d8751655d22d384682741c972f2c3d6dfa3e66b5"

@@ -3,7 +3,8 @@ require('dotenv').config();
 const { SlashCommandBuilder, ButtonBuilder, ButtonStyle,ActionRowBuilder } = require('discord.js');
 const fs = require("fs");
 const { decrypt} = require ("../encryption.js")
-const { findOneWalletByID, findKeyByID } = require('../db');
+// const { findOneWalletByID, findKeyByID } = require('../db');
+const { findOneWalletByID, findKeyByID } = require("mars-simple-mongodb"); // Adjust the import path as necessary
 const bs58 = require('bs58');
 const {
     Keypair,
@@ -18,7 +19,7 @@ const {
 
   const { TOKEN_PROGRAM_ID, getAssociatedTokenAddress, createTransferInstruction,createAssociatedTokenAccountInstruction,ASSOCIATED_TOKEN_PROGRAM_ID  } = require('@solana/spl-token');
 
-let connection = new Connection(clusterApiUrl("testnet"));
+// let connection = new Connection(clusterApiUrl("testnet"));
 
 class SolPayment {
     constructor() {
@@ -72,7 +73,7 @@ class SolPayment {
     async performTransfer(interaction,lamportAmount,targetUser){
         try {
             const userKeypair = await this.initUserKeypair(interaction.user.id)
-            const targetWalletData = await findOneWalletByID('wallet','user_wallets',targetUser.id)
+            const targetWalletData = await findOneWalletByID('wallets','user_wallets',targetUser.id)
             if(!targetWalletData) {
                 await interaction.reply({ content: `${targetUser.username} does not have a wallet`, ephemeral: true });
                 return false;
@@ -123,7 +124,7 @@ class SolPayment {
             const senderKeypair = await this.initUserKeypair(interaction.user.id);
             let receiverPublicKey = null;
             if(targetIsUser){
-                const targetWalletData = await findOneWalletByID('wallet','user_wallets',targetUser.id);
+                const targetWalletData = await findOneWalletByID('wallets','user_wallets',targetUser.id);
                 receiverPublicKey = new PublicKey(targetWalletData.publicKey);
             }
             else{
@@ -152,7 +153,7 @@ class SolPayment {
     }
 
     async initUserKeypair(targetId) {
-        const walletData = await findOneWalletByID('wallet','user_wallets',targetId);
+        const walletData = await findOneWalletByID('wallets','user_wallets',targetId);
         const userKeyData = await findKeyByID(targetId);
         if (!walletData || !userKeyData) {
             throw new Error("Wallet or key not found");
@@ -168,14 +169,14 @@ class SolPayment {
     };
 
     async getBalance(feePayer){
-        let balance = await connection.getBalance(feePayer.publicKey);
+        let balance = await this.connection.getBalance(feePayer.publicKey);
         console.log(`${balance / LAMPORTS_PER_SOL} SOL`);
         return balance;
     };
 
     async createTransaction(fromKeypair, lamportAmount, toKey){
         
-        const { blockhash } = await connection.getLatestBlockhash('finalized');
+        const { blockhash } = await this.connection.getLatestBlockhash('finalized');
         let transaction = new Transaction();
         
         transaction.recentBlockhash = blockhash;
@@ -193,13 +194,13 @@ class SolPayment {
     };
 
     async estimateFees(transaction){
-        const fees = await transaction.getEstimatedFee(connection);
+        const fees = await transaction.getEstimatedFee(this.connection);
         return fees;
     };
 
     async signAndSendTransaction(transaction,keypair){
         try{
-            const transactionSignature = await sendAndConfirmTransaction(connection, transaction, [keypair]);
+            const transactionSignature = await sendAndConfirmTransaction(this.connection, transaction, [keypair]);
             return transactionSignature;
         }catch(e){
             console.error(e)
@@ -370,6 +371,19 @@ class SolPayment {
             console.log("Token account not found or not initialized.");
             return 0;
         }
+    }
+
+    async  getBalance(publicKey){
+        const key = new PublicKey( publicKey);
+        let balance = await this.connection.getBalance(key);
+        console.log(`${balance / LAMPORTS_PER_SOL} SOL`);
+        return balance;
+    };
+
+    
+    async lps(){
+        const conversion =LAMPORTS_PER_SOL
+        return conversion;
     }
 }
 

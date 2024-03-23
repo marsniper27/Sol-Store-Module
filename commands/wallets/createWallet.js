@@ -3,7 +3,8 @@ require('dotenv').config();
 const { SlashCommandBuilder } = require('discord.js');
 const solanaWeb3 = require("@solana/web3.js");
 const fs = require("fs");
-const { saveWallet, findOneWalletByID, saveKey} = require('../../db');
+// const { saveWallet, findOneWalletByID, saveKey} = require('../../db');
+const { saveWallet, findOneWalletByID, saveKey } = require("mars-simple-mongodb"); // Adjust the import path as necessary
 
 // const uri = `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASSWORD}@cluster0.zdr3lzw.mongodb.net/wallets?retryWrites=true&w=majority`;
 const {generateKey, encrypt, decrypt} = require ("../../encryption.js")
@@ -17,7 +18,7 @@ module.exports = {
 	async execute(interaction) {
         const target = interaction.options.getUser('user') ?? interaction.user;
         try {
-            const hasWallet = await findOneWalletByID('wallet','user_wallets',target.id)
+            const hasWallet = await findOneWalletByID('wallets','user_wallets',target.id)
             if(hasWallet) {
                 interaction.reply({ content: `You already have a wallet`, ephemeral: true });
                 return;
@@ -41,7 +42,7 @@ module.exports = {
 
             const encryptSecret = encrypt(encryptKey,keys.secretKey)
         
-            await saveWallet('wallet','user_wallets',
+            await saveWallet('wallets','user_wallets',
                 {
                     _id:target.id,
                     publicKey: keys.publicKey.toBase58(),

@@ -3,7 +3,8 @@ require('dotenv').config();
 const { SlashCommandBuilder } = require('discord.js');
 const fs = require("fs");
 const { decrypt} = require ("../../encryption.js")
-const { findOneWalletByID,findKeyByID } = require('../../db');
+// const { findOneWalletByID,findKeyByID } = require('../../db');
+const { findOneWalletByID,findKeyByID } = require("mars-simple-mongodb"); // Adjust the import path as necessary
 const bs58 = require('bs58');
 
 module.exports = {
@@ -15,7 +16,7 @@ module.exports = {
         const targetId = target.id;
         try {
             await interaction.reply({ content: `Fetching Wallet`, ephemeral: true });
-            const walletData = await findOneWalletByID('wallet','user_wallets',target.id)
+            const walletData = await findOneWalletByID('wallets','user_wallets',target.id)
             if(!walletData) {
                 interaction.reply({ content: `You do not have a wallet`, ephemeral: true });
                 return;

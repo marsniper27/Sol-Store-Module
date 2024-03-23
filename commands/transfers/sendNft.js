@@ -3,7 +3,8 @@
 const { Client, GatewayIntentBits, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, SelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { Metaplex, keypairIdentity, bundlrStorage, toMetaplexFileFromBrowser } = require('@metaplex/js');
 const { Connection, PublicKey,Keypair } = require('@solana/web3.js');
-const { findOneWalletByID, findKeyByID } = require('../../db');
+// const { findOneWalletByID, findKeyByID } = require('../../db');
+const { findOneWalletByID, findKeyByID } = require("mars-simple-mongodb"); // Adjust the import path as necessary
 const { decrypt } = require("../../encryption");
 const NftSelector = require('../../embeds/nftSelector');
 const SolPayment = require('../../utils/solPayment');
@@ -55,11 +56,10 @@ module.exports = {
             return;
         }
 
-        const followUpMessage = await interaction.followUp({ content: 'Transaction sent, waiting for confirmation.', fetchReply: true, ephemeral: true });
+        await interaction.followUp({ content: 'Transaction sent, waiting for confirmation.', fetchReply: true, ephemeral: true });
         
         const success = await solPayment.transferSPL(interaction, selectedNft, recipient, targetIsUser,1);
 
-        // Now, to edit the follow-up message, use the `.edit` method on the `followUpMessage`
         if (success && !(success instanceof Error)) {
             await interaction.followUp({ content: 'NFT transfer successful!', ephemeral: true });
             if (target) {
@@ -72,7 +72,7 @@ module.exports = {
 }
 
 async function initUserKeypair(targetId) {
-    const walletData = await findOneWalletByID('wallet','user_wallets',targetId);
+    const walletData = await findOneWalletByID('wallets','user_wallets',targetId);
     const userKeyData = await findKeyByID(targetId);
     if (!walletData || !userKeyData) {
         throw new Error("Wallet or key not found");

@@ -21,6 +21,7 @@
     "@solana/web3.js": "^1.91.0",
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.5",
+    "mars-simple-mongodb": "^0.1.0",
     "mongodb": "^6.5.0"
   }
 }

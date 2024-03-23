@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { SlashCommandBuilder } = require('discord.js');
-const { findOneWalletByID,findKeyByID } = require('../../db');
+// const { findOneWalletByID,findKeyByID } = require('../../db');
+const { findOneWalletByID } = require("mars-simple-mongodb"); // Adjust the import path as necessary
 const { LAMPORTS_PER_SOL,PublicKey } = require('@solana/web3.js');
 const solanaWeb3 = require("@solana/web3.js");
 
@@ -14,7 +15,7 @@ module.exports = {
         await interaction.reply({ content: `Fetching Wallet`, ephemeral: true });
         
         try {
-            const walletData = await findOneWalletByID('wallet','user_wallets',target.id)
+            const walletData = await findOneWalletByID('wallets','user_wallets',target.id)
             if(!walletData) {
                 interaction.editReply({ content: `You do not have a wallet`, ephemeral: true });
                 return;
